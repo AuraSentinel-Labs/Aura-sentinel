@@ -1,0 +1,16 @@
+﻿{
+  "name": "AURA OS",
+  "short_name": "AURA",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#020202",
+  "theme_color": "#020202",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Black_icon.svg/512px-Black_icon.svg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

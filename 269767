@@ -1,0 +1,294 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#020202">
+    <link rel="manifest" href="manifest.json">
+    <title>AURA | Ghost OS</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        body { -webkit-user-select: none; user-select: none; background-color: #020202; color: #fff; font-family: 'Inter', sans-serif; overflow: hidden; }
+        .aura-gradient { background: linear-gradient(135deg, #007BFF, #6200EE, #FF4B5C); }
+        .gold-text { background: linear-gradient(to right, #BF953F, #FCF6BA, #B38728); -webkit-background-clip: text; color: transparent; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        
+        /* Stages & Overlays */
+        #gatekeeper, #manifesto, #broadcast-overlay { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.6s ease; }
+        .hidden-flow { opacity: 0; pointer-events: none; transform: scale(1.05); }
+        #broadcast-overlay { opacity: 0; pointer-events: none; z-index: 9998; padding: 40px; }
+        #broadcast-overlay.active { opacity: 1; pointer-events: auto; }
+        #main-ui { opacity: 0; transition: opacity 1s ease; }
+        .view-section { transition: transform 0.4s ease; }
+        .hidden-view { display: none !important; }
+
+        /* Chat Styles */
+        .msg-sent { background: #6200EE; border-radius: 18px 18px 4px 18px; margin-left: auto; max-width: 85%; padding: 12px; font-size: 14px; }
+        .msg-received { background: #1a1a1a; border-radius: 18px 18px 18px 4px; max-width: 85%; padding: 12px; font-size: 14px; color: #d1d5db; }
+        
+        /* Voice Recording Pulse */
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .recording-active { animation: pulse-red 1.5s infinite; background: #ef4444 !important; }
+        
+        /* Audio Bubble */
+        .voice-bubble { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+        .waveform-mock { flex: 1; height: 15px; background: rgba(255,255,255,0.2); border-radius: 10px; position: relative; overflow: hidden; }
+        .waveform-mock::after { content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 60%; background: #fff; }
+    </style>
+</head>
+<body>
+
+    <div id="gatekeeper">
+        <div class="text-center space-y-6">
+            <div class="w-20 h-20 aura-gradient rounded-[24px] mx-auto flex items-center justify-center rotate-45 shadow-[0_0_50px_rgba(98,0,238,0.4)]">
+                <i data-lucide="shield-check" class="text-white w-10 -rotate-45"></i>
+            </div>
+            <h1 class="text-xl font-black tracking-[0.4em] gold-text">AURA OS</h1>
+            <input type="password" id="access-key" maxlength="6" placeholder="000000" class="bg-transparent border-b-2 border-white/10 w-32 text-center text-2xl outline-none focus:border-purple-500 transition-all font-mono text-white">
+            <button onclick="unlockApp()" class="block mx-auto mt-8 text-[10px] font-black border border-white/20 px-8 py-3 rounded-full hover:bg-white/10 transition text-white">AUTHENTICATE</button>
+        </div>
+    </div>
+
+    <div id="manifesto" class="hidden-flow">
+        <div class="p-8 space-y-8 w-full max-w-md mx-auto">
+            <div class="text-center">
+                <h2 class="text-2xl font-black italic gold-text">The Ghost Manifesto</h2>
+                <p class="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Aura Global Node Agreement</p>
+            </div>
+            <div class="text-xs text-gray-400 space-y-4 font-light leading-relaxed max-h-[50vh] overflow-y-auto pr-2">
+                <p><b class="text-white">1. ANONYMITY:</b> Your identity is your own. AURA does not scrape, store, or sell personal metadata.</p>
+                <p><b class="text-white">2. ENCRYPTION:</b> All data sent to the Sentinel AI is processed via encrypted tunnels.</p>
+                <p><b class="text-white">3. SOVEREIGNTY:</b> By entering, you agree to operate outside standard surveillance.</p>
+            </div>
+            <button onclick="acceptManifesto()" class="w-full aura-gradient py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-2xl active:scale-95 transition">I AGREE</button>
+        </div>
+    </div>
+
+    <div id="broadcast-overlay">
+        <div class="space-y-6 w-full max-w-md mx-auto">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                <span class="text-[10px] font-black tracking-widest text-red-500 uppercase">Incoming Transmission</span>
+            </div>
+            <h2 id="broadcast-text" class="text-lg font-mono text-gray-200 leading-relaxed italic"></h2>
+            <button id="close-broadcast" onclick="endBroadcast()" class="hidden mt-10 text-[10px] font-black gold-text border border-gold-500/30 px-6 py-2 rounded-full uppercase">Enter the Mesh</button>
+        </div>
+    </div>
+
+    <div id="main-ui" class="h-screen flex flex-col">
+        <div class="bg-black border-b border-white/5 p-3 flex justify-between px-6 items-center">
+            <span class="text-[9px] font-mono text-green-500 uppercase">● Live</span>
+            <div class="flex items-center gap-2">
+                <i data-lucide="radio" class="w-3 text-purple-500"></i>
+                <span class="text-[9px] font-mono text-gray-500">Lagos-Node-01</span>
+            </div>
+        </div>
+
+        <main class="flex-1 overflow-y-auto pb-24 relative">
+            
+            <section id="view-home" class="view-section p-6 hidden-view">
+                <div class="p-8 glass rounded-[40px] text-center mb-6 relative overflow-hidden">
+                    <p class="text-[10px] text-gray-500 uppercase font-black mb-2">Network Capital</p>
+                    <h2 class="text-5xl font-black italic gold-text">$142,050</h2>
+                </div>
+                <button onclick="switchView('chat')" class="w-full aura-gradient py-4 rounded-2xl font-black text-xs uppercase text-white shadow-lg flex justify-center gap-2 items-center">
+                    <i data-lucide="message-square" class="w-4"></i> Open Sentinel DMs
+                </button>
+            </section>
+
+            <section id="view-chat" class="view-section flex flex-col h-full absolute inset-0">
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
+                    <div class="msg-received">Founder, the database is connected. Voice and text transmissions are now fully persistent.</div>
+                </div>
+                
+                <div class="absolute bottom-20 left-0 w-full p-4 bg-black/80 backdrop-blur-md border-t border-white/5">
+                    <div class="bg-white/5 rounded-[30px] border border-white/10 p-2 flex items-center gap-2">
+                        <button class="p-2 text-gray-400"><i data-lucide="plus"></i></button>
+                        <input type="text" id="msg-input" oninput="toggleInputMode()" placeholder="Message Sentinel..." class="flex-1 bg-transparent outline-none text-sm px-2 text-white">
+                        <button id="action-btn" onclick="handleAction()" class="w-10 h-10 aura-gradient rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90">
+                            <i id="action-icon" data-lucide="mic" class="w-4 text-white"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="fixed bottom-0 w-full h-20 glass flex justify-around items-center px-4 pb-4 z-50">
+            <button onclick="switchView('home')" class="text-gray-500 flex flex-col items-center"><i data-lucide="layout-grid"></i></button>
+            <button onclick="switchView('chat')" class="text-blue-500 flex flex-col items-center"><i data-lucide="message-square"></i></button>
+            <div class="w-14 h-12 aura-gradient rounded-xl flex items-center justify-center -mt-8 border-4 border-black shadow-xl"><i data-lucide="zap" class="text-white"></i></div>
+            <button class="text-gray-500"><i data-lucide="wallet"></i></button>
+            <button class="text-gray-500"><i data-lucide="settings"></i></button>
+        </footer>
+    </div>
+
+    <script>
+        // 1. DATABASE INITIALIZATION (Your exact keys)
+        const { createClient } = supabase;
+        const SUPABASE_URL = 'https://xsozychsrccekaucdnpc.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzb3p5Y2hzcmNjZWthdWNkbnBjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NTQ2MzksImV4cCI6MjA5MTMzMDYzOX0.Qo2uHfTreo-Yqv0YYDrmtoga5MY6OtAtrsMsA5cUnBY';
+        const auraVault = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        lucide.createIcons();
+        let isRecording = false;
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // 2. UI NAVIGATION LOGIC
+        function unlockApp() {
+            if(document.getElementById('access-key').value === "000000") {
+                document.getElementById('gatekeeper').classList.add('hidden-flow');
+                setTimeout(() => document.getElementById('manifesto').classList.remove('hidden-flow'), 600);
+            } else { alert("ACCESS DENIED"); }
+        }
+
+        function acceptManifesto() {
+            document.getElementById('manifesto').classList.add('hidden-flow');
+            setTimeout(() => {
+                document.getElementById('broadcast-overlay').classList.add('active');
+                typeWriter();
+            }, 800);
+        }
+
+        const msgText = "System online. Database synced. You are operating via the Lagos Node. Execute commands with intent. - Founder Zero";
+        let msgIdx = 0;
+        function typeWriter() {
+            if (msgIdx < msgText.length) {
+                document.getElementById('broadcast-text').innerHTML += msgText.charAt(msgIdx);
+                msgIdx++;
+                setTimeout(typeWriter, 30);
+            } else {
+                document.getElementById('close-broadcast').classList.remove('hidden');
+            }
+        }
+
+        function endBroadcast() {
+            document.getElementById('broadcast-overlay').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('broadcast-overlay').style.display = 'none';
+                document.getElementById('main-ui').style.opacity = '1';
+                switchView('chat');
+                loadMessages(); // Load DB messages
+            }, 800);
+        }
+
+        function switchView(id) {
+            document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden-view'));
+            document.getElementById('view-' + id).classList.remove('hidden-view');
+        }
+
+        // 3. CHAT INPUT LOGIC (Text vs Mic switch)
+        function toggleInputMode() {
+            const input = document.getElementById('msg-input');
+            const icon = document.getElementById('action-icon');
+            if (input.value.trim() !== "") {
+                icon.setAttribute('data-lucide', 'send');
+            } else {
+                icon.setAttribute('data-lucide', 'mic');
+            }
+            lucide.createIcons();
+        }
+
+        async function handleAction() {
+            const input = document.getElementById('msg-input');
+            if (input.value.trim() !== "") {
+                const text = input.value;
+                input.value = "";
+                toggleInputMode();
+                
+                // Save to Database
+                renderMessage({ content: text, type: 'text', sender: 'me' });
+                await auraVault.from('transmissions').insert([{ node_id: 'Founder', content: text, type: 'text' }]);
+            } else {
+                toggleVoiceRecord();
+            }
+        }
+
+        // 4. VOICE RECORDING ENGINE
+        async function toggleVoiceRecord() {
+            const btn = document.getElementById('action-btn');
+            
+            if (!isRecording) {
+                // START RECORD
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = saveVoiceNote;
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btn.classList.add('recording-active');
+                } catch(err) {
+                    alert("Microphone access required for Ghost Mesh communication.");
+                }
+            } else {
+                // STOP RECORD
+                isRecording = false;
+                btn.classList.remove('recording-active');
+                mediaRecorder.stop();
+            }
+        }
+
+        async function saveVoiceNote() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/mpeg' });
+            const fileName = `voice_${Date.now()}.mp3`;
+            
+            // Upload to Supabase Storage
+            const { data, error } = await auraVault.storage.from('ghost-storage').upload(`vault/${fileName}`, audioBlob);
+            
+            if (!error) {
+                const { data: urlData } = auraVault.storage.from('ghost-storage').getPublicUrl(`vault/${fileName}`);
+                
+                // Save link to Database
+                await auraVault.from('transmissions').insert([{ node_id: 'Founder', media_url: urlData.publicUrl, type: 'voice' }]);
+                
+                renderMessage({ type: 'voice', media_url: urlData.publicUrl, sender: 'me' });
+            } else {
+                console.error("Storage upload failed. Did you configure the Public Bucket Policy?");
+            }
+        }
+
+        // 5. RENDER MESSAGES TO SCREEN
+        function renderMessage(msg) {
+            const chat = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = msg.sender === 'me' ? 'msg-sent' : 'msg-received';
+            
+            if (msg.type === 'text') {
+                div.innerText = msg.content;
+            } else if (msg.type === 'voice') {
+                div.innerHTML = `
+                    <div class="voice-bubble">
+                        <i data-lucide="play" class="w-4 text-white cursor-pointer" onclick="new Audio('${msg.media_url}').play()"></i>
+                        <div class="waveform-mock"></div>
+                        <span class="text-[10px] font-bold text-white">VOICE</span>
+                    </div>`;
+            }
+            chat.appendChild(div);
+            lucide.createIcons();
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // 6. LOAD HISTORY FROM VAULT
+        async function loadMessages() {
+            const { data } = await auraVault.from('transmissions').select('*').order('created_at', { ascending: true });
+            if (data) {
+                data.forEach(msg => {
+                    // Assuming all loaded history is from Founder for this demo
+                    renderMessage({ content: msg.content, type: msg.type, media_url: msg.media_url, sender: 'me' });
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+
